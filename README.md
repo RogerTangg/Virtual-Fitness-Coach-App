@@ -13,13 +13,13 @@ Virtual Coach App 是一款現代化的健身訓練應用程式，透過智能�
 
 ### ✨ 核心功能
 
-- 🎯 **個性化訓練計畫**: 根據訓練目標（減脂/增肌/耐力）自動生成
-- 💪 **肌群選擇**: 支援胸部、背部、腿部、肩部、手臂、核心等多個部位
-- 📊 **難度調整**: 初階、中階、高階三種難度等級
-- ⏱️ **智能計時器**: 圓形進度環設計，直觀顯示剩餘時間
-- 🎬 **運動示範**: 詳細的動作說明與指導
-- 📱 **響應式設計**: 完美支援桌面、平板、手機三種裝置
-- 🎨 **抹茶綠主題**: 清新舒適的視覺體驗
+-  **個性化訓練計畫**: 根據訓練目標（減脂/增肌/耐力）自動生成
+-  **肌群選擇**: 支援胸部、背部、腿部、肩部、手臂、核心等多個部位
+-  **難度調整**: 初階、中階、高階三種難度等級
+-  **智能計時器**: 圓形進度環設計，直觀顯示剩餘時間
+-  **運動示範**: 詳細的動作說明與指導
+-  **響應式設計**: 完美支援桌面、平板、手機三種裝置
+-  **抹茶綠主題**: 清新舒適的視覺體驗
 
 ## 🚀 快速開始
 
@@ -221,30 +221,3 @@ npm run preview
 ## 📝 授權
 
 此專案採用 MIT 授權 - 詳見 [LICENSE](LICENSE) 檔案
-
-## 👤 作者
-
-**Roger Tang**
-- GitHub: [@RogerTangg](https://github.com/RogerTangg)
-- Project Link: [Virtual-Coach-App-New_Version](https://github.com/RogerTangg/Virtual-Coach-App-New_Version)
-
-## 🙏 致謝
-
-- [React](https://reactjs.org/) - UI 框架
-- [Vite](https://vitejs.dev/) - 建置工具
-- [Mantine](https://mantine.dev/) - UI 元件庫
-- [Supabase](https://supabase.com/) - 後端服務
-- [Tailwind CSS](https://tailwindcss.com/) - CSS 框架
-- [Framer Motion](https://www.framer.com/motion/) - 動畫庫
-
-## 📞 聯絡方式
-
-如有任何問題或建議，歡迎透過以下方式聯繫：
-- 開 Issue: [GitHub Issues](https://github.com/RogerTangg/Virtual-Coach-App-New_Version/issues)
-- Email: [你的Email]
-
----
-
-⭐ 如果這個專案對你有幫助，請給個 Star！
-
-Made with ❤️ and 💪 by Roger Tang

@@ -1,13 +1,59 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="zh-TW">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>virtual-coach-app</title>
-  </head>
-  <body>
+    <title>虛擬健身教練 | Virtual Fitness Coach</title>
+    <meta name="description" content="客製化個人健身課表，隨時隨地開始訓練" />
+    
+    <!-- Google Fonts: Noto Sans TC (繁體中文) & Inter (英文數字) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS (CDN for immediate preview consistency) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
+            },
+            colors: {
+              // 品牌核心色系
+              brand: {
+                dark: '#394508',   // 深橄欖綠 (主色/文字)
+                light: '#D4EB85',  // 軟萊姆綠 (強調/按鈕) - Adjusted from #D2FD9C
+                mid: '#619111',    // 中綠色 (輔助)
+                gray: '#5D5D5D',   // 深灰 (次要文字)
+                accent: '#77912A', // 橄欖綠 (裝飾)
+              },
+              // 語意化映射
+              primary: '#394508',
+              accent: '#D4EB85', 
+              background: '#F3F4F6',
+              surface: '#FFFFFF',
+            }
+          }
+        }
+      }
+    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.83.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.469.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-background text-brand-dark font-sans antialiased selection:bg-brand-light selection:text-brand-dark">
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>
