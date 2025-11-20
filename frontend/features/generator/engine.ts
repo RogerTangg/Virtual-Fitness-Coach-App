@@ -148,7 +148,16 @@ export const generateWorkoutPlan = async (prefs: UserPreferences): Promise<PlanI
   const REST_DURATION = 30; // 固定 30 秒休息
 
   let index = 0;
+  let iterations = 0;
+  const MAX_ITERATIONS = 1000;
+
   while (currentDuration < targetDurationSeconds) {
+    // 防呆：避免無限迴圈
+    if (iterations++ > MAX_ITERATIONS) {
+      console.warn('Workout generation exceeded max iterations');
+      break;
+    }
+
     // 取出動作 (若用完則循環)
     const exercise = shuffled[index % shuffled.length];
 

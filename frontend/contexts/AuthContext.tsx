@@ -84,7 +84,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } else {
                 setLoading(false);
             }
+        }).catch(err => {
+            console.error('Session check failed:', err);
+            setLoading(false);
         });
+
+        // 安全機制：若 5 秒後仍在載入中，強制結束載入狀態
+        const safetyTimeout = setTimeout(() => {
+            setLoading(prev => {
+                if (prev) {
+                    console.warn('Auth loading timed out, forcing false');
+                    return false;
+                }
+                return prev;
+            });
+        }, 5000);
 
         // 訂閱認證狀態變更（包含 Email 驗證後的自動登入）
         const {
@@ -108,7 +122,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            subscription.unsubscribe();
+            clearTimeout(safetyTimeout);
+        };
     }, []);
 
     /**

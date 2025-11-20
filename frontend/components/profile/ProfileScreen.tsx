@@ -22,6 +22,15 @@ export const ProfileScreen: React.FC<{
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+    // 當 profile 更新時，同步更新本地狀態
+    React.useEffect(() => {
+        if (profile) {
+            setDisplayName(profile.display_name || '');
+            setHeight(profile.height?.toString() || '');
+            setWeight(profile.weight?.toString() || '');
+        }
+    }, [profile]);
+
     const handleSave = async () => {
         setLoading(true);
         setMessage(null);
@@ -93,8 +102,8 @@ export const ProfileScreen: React.FC<{
                 {message && (
                     <div
                         className={`px-4 py-3 rounded-lg text-sm ${message.type === 'success'
-                                ? 'bg-green-50 border border-green-200 text-green-700'
-                                : 'bg-red-50 border border-red-200 text-red-700'
+                            ? 'bg-green-50 border border-green-200 text-green-700'
+                            : 'bg-red-50 border border-red-200 text-red-700'
                             }`}
                     >
                         {message.text}
