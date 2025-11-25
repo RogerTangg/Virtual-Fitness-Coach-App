@@ -1,38 +1,67 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppScreen, UserPreferences, PlanItem } from './types/app';
 import { SetupScreen } from './components/setup/SetupScreen';
 import { PlanOverviewScreen } from './components/plan/PlanOverviewScreen';
 import { PlayerScreen } from './components/player/PlayerScreen';
 import { CompletedScreen } from './components/player/CompletedScreen';
+import { LoginScreen } from './components/auth/LoginScreen';
+import { RegisterScreen } from './components/auth/RegisterScreen';
+import { ProfileScreen } from './components/auth/ProfileScreen';
 import { Button } from './components/ui/Button';
 import { Dumbbell, User } from 'lucide-react';
 import { generateWorkoutPlan } from './features/generator/engine';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 /**
  * Header 組件 (Header Component)
  * 
- * 應用程式頂端導覽列，包含品牌 Logo 與版本資訊
+ * 應用程式頂端導覽列，包含品牌 Logo 與用戶資訊
  * 
  * @returns {JSX.Element} Header 組件
  */
-const Header = () => (
-  <header className="bg-brand-dark text-white py-4 px-6 flex justify-between items-center sticky top-0 z-50 shadow-md">
-    <div className="flex items-center gap-2">
-      <div className="w-8 h-8 bg-brand-light rounded-lg flex items-center justify-center text-brand-dark font-bold shadow-inner">
-        <Dumbbell size={18} strokeWidth={3} />
+const Header = ({ onProfileClick }: { onProfileClick?: () => void }) => {
+  const { user, isGuest } = useAuth();
+
+  return (
+    <header className="bg-brand-dark text-white py-4 px-6 flex justify-between items-center sticky top-0 z-50 shadow-md">
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 bg-brand-light rounded-lg flex items-center justify-center text-brand-dark font-bold shadow-inner">
+          <Dumbbell size={18} strokeWidth={3} />
+        </div>
+        <h1 className="text-xl font-bold tracking-tight text-white">
+          Virtual <span className="text-white">Coach</span>
+        </h1>
       </div>
-      <h1 className="text-xl font-bold tracking-tight text-white">
-        Virtual <span className="text-white">Coach</span>
-      </h1>
-    </div>
-    <div className="flex items-center gap-2 text-sm text-gray-300">
-      <span className="hidden sm:inline">MVP v1.0</span>
-      <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-        <User size={16} />
+
+      {/* 用戶資訊區 */}
+      <div className="flex items-center gap-3">
+        {!isGuest && user && (
+          <span className="hidden sm:inline text-brand-light font-medium">
+            {user.profile.display_name}
+          </span>
+        )}
+
+        {/* 用戶頭像按鈕 - 改進設計，更顯眼 */}
+        <button
+          onClick={onProfileClick}
+          className="group relative flex items-center gap-2 px-3 py-2 rounded-xl bg-brand-light/10 hover:bg-brand-light/20 transition-all duration-200 border-2 border-brand-light/20 hover:border-brand-light/40"
+          title={isGuest ? '登入 / 註冊' : '個人資料'}
+        >
+          <div className="w-8 h-8 rounded-full bg-brand-light flex items-center justify-center">
+            <User size={18} className="text-brand-dark" strokeWidth={2.5} />
+          </div>
+
+          {/* Guest 狀態顯示登入提示 */}
+          {isGuest && (
+            <span className="hidden md:inline text-sm font-medium text-brand-light">
+              登入 / 註冊
+            </span>
+          )}
+        </button>
       </div>
-    </div>
-  </header>
-);
+    </header>
+  );
+};
 
 /**
  * HomeScreen 組件 (Home Screen Component)
@@ -41,9 +70,10 @@ const Header = () => (
  * 
  * @param {Object} props - 組件 Props
  * @param {Function} props.onStart - 開始訓練的回調函數 (Callback to start training)
+ * @param {Function} props.onLogin - 登入的回調函數 (Callback to login)
  * @returns {JSX.Element} HomeScreen 組件
  */
-const HomeScreen = ({ onStart }: { onStart: () => void }) => (
+const HomeScreen = ({ onStart, onLogin }: { onStart: () => void; onLogin: () => void }) => (
   <div className="flex flex-col items-center justify-center min-h-[80vh] px-4 text-center space-y-10 animate-fade-in relative overflow-hidden">
 
     {/* 背景裝飾 */}
@@ -73,7 +103,21 @@ const HomeScreen = ({ onStart }: { onStart: () => void }) => (
       立即開始訓練
     </Button>
 
-    <div className="flex gap-8 text-sm text-brand-gray/60 pt-8">
+    {/* 登入/註冊提示 */}
+    <div className="text-center space-y-2">
+      <p className="text-sm text-brand-gray">
+        已經有帳號了？
+        <button
+          onClick={onLogin}
+          className="ml-1 font-bold text-brand-dark hover:underline transition-colors"
+        >
+          登入
+        </button>
+        以同步訓練紀錄至雲端
+      </p>
+    </div>
+
+    <div className="flex gap-8 text-sm text-brand-gray/60 pt-4">
       <div className="flex items-center gap-1">
         <span className="w-2 h-2 rounded-full bg-brand-light"></span> 免費使用
       </div>
@@ -110,48 +154,41 @@ const GeneratingScreen = () => (
 );
 
 /**
- * App 主組件 (Main App Component)
+ * AppContent 內部組件 (App Content Inner Component)
  * 
- * 應用程式的根組件，管理全域狀態與畫面路由
- * 
- * 狀態管理 (State Management):
- * - currentScreen: 當前畫面 (home/setup/generating/overview/workout/completed)
- * - preferences: 使用者偏好設定 (User Preferences)
- * - workoutPlan: 生成的訓練計畫 (Generated Workout Plan)
- * 
- * @returns {JSX.Element} App 組件
+ * 必須在 AuthProvider 內部才能使用 useAuth
  */
-export default function App() {
+function AppContent() {
+  const { user, isGuest, isLoading } = useAuth();
   const [currentScreen, setCurrentScreen] = useState<AppScreen>('home');
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const [workoutPlan, setWorkoutPlan] = useState<PlanItem[]>([]);
 
   /**
+   * 初始化：根據認證狀態決定初始畫面
+   */
+  useEffect(() => {
+    if (isLoading) return;
+
+    // 會員自動導向 setup（Phase 2.4 dashboard 未實作前）
+    // 訪客維持在 home
+    if (!isGuest && user) {
+      // 未來：導向 dashboard
+      // 目前：維持 home，讓使用者選擇開始訓練
+    }
+  }, [isLoading, isGuest, user]);
+
+  /**
    * 處理偏好設定完成事件 (Handle Setup Complete Event)
-   * 
-   * 當使用者完成偏好設定後，呼叫課表生成引擎生成訓練計畫
-   * 
-   * 流程 (Flow):
-   * 1. 儲存使用者偏好 (Save user preferences)
-   * 2. 切換至「生成中」畫面 (Switch to generating screen)
-   * 3. 呼叫生成引擎 (Call workout generator engine)
-   * 4. 人為延遲 1.5 秒展示載入動畫 (Artificial delay for UX)
-   * 5. 切換至課表總覽畫面 (Switch to overview screen)
-   * 
-   * @param {UserPreferences} prefs - 使用者偏好設定 (User preferences)
    */
   const handleSetupComplete = async (prefs: UserPreferences) => {
     setPreferences(prefs);
     setCurrentScreen('generating');
 
-    // 呼叫生成引擎
     try {
-      // 人為延遲展示 Loading 動畫 (提升 UX)
       await new Promise(resolve => setTimeout(resolve, 1500));
-
       const plan = await generateWorkoutPlan(prefs);
       setWorkoutPlan(plan);
-      // 生成完畢，進入總覽頁面 (Overview) 而非直接開始
       setCurrentScreen('overview');
     } catch (error) {
       console.error("生成失敗", error);
@@ -160,15 +197,39 @@ export default function App() {
     }
   };
 
+  /**
+   * 處理 Header 使用者圖示點擊
+   */
+  const handleProfileClick = () => {
+    if (isGuest) {
+      setCurrentScreen('login');
+    } else {
+      setCurrentScreen('profile');
+    }
+  };
+
+  // 載入中狀態
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 border-4 border-brand-light/30 border-t-brand-dark rounded-full animate-spin mx-auto"></div>
+          <p className="text-brand-gray">載入中...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
-      {/* 訓練模式時隱藏 Header */}
-      {currentScreen !== 'workout' && <Header />}
+      {currentScreen !== 'workout' && <Header onProfileClick={handleProfileClick} />}
 
       <main className={`flex-1 w-full ${currentScreen !== 'workout' ? 'container mx-auto max-w-4xl p-4' : ''}`}>
-
         {currentScreen === 'home' && (
-          <HomeScreen onStart={() => setCurrentScreen('setup')} />
+          <HomeScreen
+            onStart={() => setCurrentScreen('setup')}
+            onLogin={() => setCurrentScreen('login')}
+          />
         )}
 
         {currentScreen === 'setup' && (
@@ -178,9 +239,7 @@ export default function App() {
           />
         )}
 
-        {currentScreen === 'generating' && (
-          <GeneratingScreen />
-        )}
+        {currentScreen === 'generating' && <GeneratingScreen />}
 
         {currentScreen === 'overview' && workoutPlan.length > 0 && (
           <PlanOverviewScreen
@@ -205,6 +264,29 @@ export default function App() {
           <CompletedScreen
             durationMinutes={preferences.durationMinutes}
             onHome={() => setCurrentScreen('home')}
+            onRegister={() => setCurrentScreen('register')}
+          />
+        )}
+
+        {currentScreen === 'login' && (
+          <LoginScreen
+            onRegister={() => setCurrentScreen('register')}
+            onGuestContinue={() => setCurrentScreen('setup')}
+            onSuccess={() => setCurrentScreen('home')}
+            onBack={() => setCurrentScreen('home')}
+          />
+        )}
+
+        {currentScreen === 'register' && (
+          <RegisterScreen
+            onLogin={() => setCurrentScreen('login')}
+            onBack={() => setCurrentScreen('home')}
+          />
+        )}
+
+        {currentScreen === 'profile' && (
+          <ProfileScreen
+            onBack={() => setCurrentScreen('home')}
           />
         )}
       </main>
@@ -215,5 +297,18 @@ export default function App() {
         </footer>
       )}
     </div>
+  );
+}
+
+/**
+ * App 主組件 (Main App Component)
+ * 
+ * 包裹 AuthProvider 提供全域認證狀態
+ */
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
