@@ -7,7 +7,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/Button';
-import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { User as UserIcon, Mail, Calendar, Edit2, Check, X, LogOut } from 'lucide-react';
 
 interface ProfileScreenProps {
@@ -20,7 +19,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack }) => {
     const [newDisplayName, setNewDisplayName] = useState(user?.profile.display_name || '');
     const [isUpdating, setIsUpdating] = useState(false);
     const [error, setError] = useState('');
-    const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
     if (!user) {
         return null;
@@ -64,22 +62,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack }) => {
     };
 
     /**
-     * 處理登出 - 顯示確認對話框
+     * 處理登出
      */
-    const handleSignOut = () => {
-        setShowLogoutConfirm(true);
-    };
-
-    /**
-     * 確認登出
-     */
-    const confirmSignOut = async () => {
-        try {
-            await signOut();
-            setShowLogoutConfirm(false);
-        } catch (err) {
-            setError('登出失敗，請稍後再試');
-            setShowLogoutConfirm(false);
+    const handleSignOut = async () => {
+        if (confirm('確定要登出嗎？')) {
+            try {
+                await signOut();
+            } catch (err) {
+                alert('登出失敗，請稍後再試');
+            }
         }
     };
 
@@ -224,17 +215,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack }) => {
                     所有訓練紀錄已自動同步至雲端 ☁️
                 </p>
             </div>
-
-            {/* 登出確認對話框 */}
-            <ConfirmDialog
-                isOpen={showLogoutConfirm}
-                title="確定要登出嗎？"
-                message="登出後需要重新登入才能存取會員功能。"
-                confirmText="登出"
-                cancelText="取消"
-                onConfirm={confirmSignOut}
-                onCancel={() => setShowLogoutConfirm(false)}
-            />
         </div>
     );
 };

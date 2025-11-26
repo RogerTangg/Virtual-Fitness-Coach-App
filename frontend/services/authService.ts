@@ -36,8 +36,7 @@ export const signUp = async (
                 data: {
                     display_name: displayName
                 },
-                // 使用生產環境 URL 避免本地開發時洩漏 localhost
-                emailRedirectTo: import.meta.env.VITE_APP_URL || 'https://virtual-coach.onrender.com'
+                emailRedirectTo: `${window.location.origin}`
             }
         });
 

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/Button';
-import { AUTH_ERROR_MESSAGES, type AuthError } from '../../types/auth';
 import { UserPlus, Mail, Lock, User, ArrowLeft, CheckCircle, Inbox } from 'lucide-react';
 
 interface RegisterScreenProps {
@@ -62,9 +61,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onBack 
             }
             // 如果不需要驗證，AuthContext 會自動更新狀態並導向首頁
         } catch (err) {
-            // 顯示具體錯誤訊息
-            const authError = err as AuthError;
-            setError(AUTH_ERROR_MESSAGES[authError] || '發生錯誤，請稍後再試');
+            setError('發生錯誤，請稍後再試');
         } finally {
             setIsLoading(false);
         }
