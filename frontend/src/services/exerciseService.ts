@@ -1,5 +1,5 @@
 
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Exercise } from '../types/db';
 import { MOCK_EXERCISES } from '../data/mockExercises';
 
@@ -9,10 +9,9 @@ import { MOCK_EXERCISES } from '../data/mockExercises';
  */
 export const getAllExercises = async (): Promise<Exercise[]> => {
   try {
-    // 檢查 Supabase 客戶端是否已配置 URL (避免無效請求)
-    // @ts-ignore - 存取內部屬性以進行快速檢查
-    if (!supabase.supabaseUrl || supabase.supabaseUrl === '') {
-      console.warn('Supabase URL 未設定，使用模擬資料。');
+    // 檢查 Supabase 是否已配置
+    if (!isSupabaseConfigured) {
+      console.warn('Supabase 未正確設定，使用模擬資料。');
       return MOCK_EXERCISES;
     }
 

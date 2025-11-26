@@ -111,14 +111,8 @@ export const generateWorkoutPlan = async (prefs: UserPreferences): Promise<PlanI
     }
     // Advanced 接受所有難度，不做過濾
 
-    // C. 目標檢查 (Goal) - 選用
-    const goalMap: Record<string, string> = { 'muscle': '增肌', 'fat-loss': '減脂', 'tone': '塑形' };
-    const targetGoal = goalMap[prefs.goal];
-
-    // 檢查 tags 陣列是否包含該目標
-    // const hasGoal = safeTags.some(t => t === `goal:${targetGoal}`);
-
-    // 目前僅用來過濾器材與難度，目標作為軟性篩選條件(暫不強制)
+    // C. 目標檢查 (Goal) - 目前僅用來過濾器材與難度，目標作為軟性篩選條件(暫不強制)
+    // 未來可考慮加入目標篩選: safeTags.some(t => t === `goal:${goalMap[prefs.goal]}`)
 
     return true;
   });

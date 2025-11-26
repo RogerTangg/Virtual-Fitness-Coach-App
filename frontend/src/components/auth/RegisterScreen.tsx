@@ -1,13 +1,14 @@
 /**
  * RegisterScreen - 註冊畫面組件 (Register Screen Component)
  * 
- * 提供 Email/密碼註冊表單
+ * 提供 Email/密碼註冊表單，支援 Email 驗證流程
  */
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { signUp } from '@/services/authService';
 import { useAuth } from '@/features/auth/AuthContext';
+import { EmailVerificationScreen } from './EmailVerificationScreen';
 import { UserPlus } from 'lucide-react';
 
 interface RegisterScreenProps {
@@ -29,6 +30,10 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
     const [displayName, setDisplayName] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    
+    // Email 驗證狀態
+    const [showVerification, setShowVerification] = useState(false);
+    const [pendingEmail, setPendingEmail] = useState('');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -49,20 +54,39 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
         setIsLoading(true);
 
         try {
-            const user = await signUp({
+            const result = await signUp({
                 email,
                 password,
                 confirmPassword,
                 display_name: displayName || undefined,
             });
-            setUser(user);
-            onSuccess();
+
+            if (result.needsEmailVerification) {
+                // 需要 Email 驗證，顯示驗證提示畫面
+                setPendingEmail(result.email);
+                setShowVerification(true);
+            } else if (result.user) {
+                // 不需要驗證，直接登入
+                setUser(result.user);
+                onSuccess();
+            }
         } catch (err: any) {
             setError(err.message || '註冊失敗，請稍後再試');
         } finally {
             setIsLoading(false);
         }
     };
+
+    // 顯示 Email 驗證提示畫面
+    if (showVerification) {
+        return (
+            <EmailVerificationScreen
+                email={pendingEmail}
+                onBackToLogin={onSwitchToLogin}
+                onVerificationSuccess={onSuccess}
+            />
+        );
+    }
 
     return (
         <div className="flex flex-col items-center justify-center min-h-[80vh] px-4">

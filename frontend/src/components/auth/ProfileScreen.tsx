@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { updateProfile, signOut } from '@/services/authService';
 import { useAuth } from '@/features/auth/AuthContext';
 import { User, LogOut, Save } from 'lucide-react';
@@ -22,6 +23,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack }) => {
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
     if (!user) {
         return (
@@ -49,15 +51,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack }) => {
         }
     };
 
-    const handleSignOut = async () => {
-        if (confirm('確定要登出嗎？')) {
-            try {
-                await signOut();
-                setUser(null);
-                onBack();
-            } catch (err: any) {
-                setError(err.message || '登出失敗');
-            }
+    const handleSignOutConfirm = async () => {
+        setShowLogoutDialog(false);
+        try {
+            await signOut();
+            setUser(null);
+            onBack();
+        } catch (err: any) {
+            setError(err.message || '登出失敗');
         }
     };
 
@@ -156,7 +157,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack }) => {
                 {/* Actions */}
                 <div className="space-y-3">
                     <Button
-                        onClick={handleSignOut}
+                        onClick={() => setShowLogoutDialog(true)}
                         variant="secondary"
                         className="w-full"
                     >
@@ -172,6 +173,19 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack }) => {
                         返回首頁
                     </Button>
                 </div>
+
+                {/* Logout Confirmation Dialog */}
+                <ConfirmDialog
+                    isOpen={showLogoutDialog}
+                    type="warning"
+                    title="確定要登出嗎？"
+                    message="登出後您的訓練記錄將無法同步，但仍可以訪客身份使用。"
+                    confirmText="登出"
+                    cancelText="取消"
+                    confirmVariant="danger"
+                    onConfirm={handleSignOutConfirm}
+                    onCancel={() => setShowLogoutDialog(false)}
+                />
             </div>
         </div>
     );

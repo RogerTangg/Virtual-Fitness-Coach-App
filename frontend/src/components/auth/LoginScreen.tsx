@@ -2,12 +2,14 @@
  * LoginScreen - 登入畫面組件 (Login Screen Component)
  * 
  * 提供 Email/密碼登入表單與導航至註冊頁面的連結
+ * 支援未驗證用戶跳轉至驗證提示頁面
  */
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { signIn } from '@/services/authService';
 import { useAuth } from '@/features/auth/AuthContext';
+import { EmailVerificationScreen } from './EmailVerificationScreen';
 import { LogIn, User } from 'lucide-react';
 
 interface LoginScreenProps {
@@ -31,6 +33,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    
+    // Email 驗證狀態
+    const [showVerification, setShowVerification] = useState(false);
+    const [pendingEmail, setPendingEmail] = useState('');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -38,15 +44,41 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         setIsLoading(true);
 
         try {
-            const user = await signIn({ email, password });
-            setUser(user);
-            onSuccess();
+            const result = await signIn({ email, password });
+            
+            if (result.needsEmailVerification) {
+                // 需要 Email 驗證，顯示驗證提示畫面
+                setPendingEmail(result.email || email);
+                setShowVerification(true);
+                setIsLoading(false);
+                return;
+            }
+            
+            if (result.success && result.user) {
+                // 登入成功
+                setUser(result.user);
+                onSuccess();
+            } else {
+                // 其他未知狀態
+                setError('登入失敗，請稍後再試');
+            }
         } catch (err: any) {
             setError(err.message || '登入失敗，請檢查 Email 與密碼');
         } finally {
             setIsLoading(false);
         }
     };
+
+    // 顯示 Email 驗證提示畫面
+    if (showVerification) {
+        return (
+            <EmailVerificationScreen
+                email={pendingEmail}
+                onBackToLogin={() => setShowVerification(false)}
+                onVerificationSuccess={onSuccess}
+            />
+        );
+    }
 
     return (
         <div className="flex flex-col items-center justify-center min-h-[80vh] px-4">

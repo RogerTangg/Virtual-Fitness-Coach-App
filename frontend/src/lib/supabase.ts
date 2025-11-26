@@ -20,20 +20,50 @@ import { createClient } from '@supabase/supabase-js';
 /**
  * 安全地獲取環境變數 (Safely Get Environment Variable)
  * 
+ * 改善重點 (Improvements):
+ * 1. 提供開發模式的優雅降級
+ * 2. 避免生產環境直接崩潰
+ * 3. 提供清晰的錯誤提示
+ * 
  * @param {string} key - 環境變數名稱 (Environment variable name)
+ * @param {string} [fallback] - 備用值 (Fallback value)
  * @returns {string} 環境變數值 (Environment variable value)
- * @throws {Error} 若環境變數未設定 (If environment variable is not set)
  */
-const getRequiredEnv = (key: string): string => {
+const getRequiredEnv = (key: string, fallback?: string): string => {
   try {
     // @ts-ignore - Vite 環境變數存取 (Vite environment variable access)
     const value = import.meta.env?.[key];
 
     if (!value) {
-      throw new Error(
-        `環境變數 ${key} 未設定。請在 .env 檔案中設定此變數。\n` +
-        `Environment variable ${key} is not set. Please configure it in your .env file.`
-      );
+      const isDevelopment = import.meta.env?.MODE === 'development';
+      
+      if (fallback) {
+        console.warn(
+          `⚠️ 環境變數 ${key} 未設定，使用備用值。\n` +
+          `Environment variable ${key} is not set, using fallback.`
+        );
+        return fallback;
+      }
+
+      const errorMsg = 
+        `❌ 環境變數 ${key} 未設定！\n\n` +
+        `設定步驟 (Setup Steps):\n` +
+        `1. 複製 .env.example 為 .env\n` +
+        `2. 填入您的 Supabase 憑證\n` +
+        `3. 重新啟動開發伺服器\n\n` +
+        `Environment variable ${key} is not set!\n` +
+        `Please check your .env file.`;
+
+      console.error(errorMsg);
+
+      // 開發模式：顯示錯誤但不崩潰
+      if (isDevelopment) {
+        console.warn('⚠️ 開發模式：使用空字串作為備用值');
+        return '';
+      }
+
+      // 生產模式：拋出錯誤
+      throw new Error(`Missing required environment variable: ${key}`);
     }
 
     return value;
@@ -48,5 +78,14 @@ const supabaseAnonKey = getRequiredEnv('VITE_SUPABASE_ANON_KEY');
 
 /**
  * 全域 Supabase Client 實例 (Global Supabase Client Instance)
+ * 如果配置無效，使用 placeholder 值以避免 createClient 拋出錯誤
  */
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key'
+);
+
+/**
+ * 檢查 Supabase 是否已正確配置
+ */
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);

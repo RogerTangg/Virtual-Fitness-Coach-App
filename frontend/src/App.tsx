@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppScreen, UserPreferences, PlanItem } from './types/app';
 import { SetupScreen } from './components/setup/SetupScreen';
 import { PlanOverviewScreen } from './components/plan/PlanOverviewScreen';
@@ -8,9 +8,12 @@ import { LoginScreen } from './components/auth/LoginScreen';
 import { RegisterScreen } from './components/auth/RegisterScreen';
 import { ProfileScreen } from './components/auth/ProfileScreen';
 import { Button } from './components/ui/Button';
-import { Dumbbell, User, LogIn } from 'lucide-react';
+import { ConfirmDialog } from './components/ui/ConfirmDialog';
+import { ToastContainer } from './components/ui/Toast';
+import { Dumbbell, User, LogIn, Loader2 } from 'lucide-react';
 import { generateWorkoutPlan } from './features/generator/engine';
 import { AuthProvider, useAuth } from './features/auth/AuthContext';
+import { useToast, useConfirmDialog } from './hooks/useDialog';
 
 const Header = ({ onProfileClick, onLoginClick }: { onProfileClick: () => void; onLoginClick: () => void }) => {
     const { user, isLoading } = useAuth();
@@ -126,11 +129,44 @@ const GeneratingScreen = () => (
     </div>
 );
 
+// Email 驗證中的載入畫面
+const VerifyingScreen = () => (
+    <div className="flex flex-col items-center justify-center min-h-screen space-y-6 bg-background">
+        <div className="relative">
+            <div className="w-20 h-20 border-4 border-brand-light/30 border-t-brand-dark rounded-full animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+                <Loader2 className="text-brand-dark animate-spin" size={28} />
+            </div>
+        </div>
+        <div className="text-center space-y-2">
+            <h3 className="text-2xl font-bold text-brand-dark">正在驗證您的帳號...</h3>
+            <p className="text-brand-gray">請稍候，馬上就好</p>
+        </div>
+    </div>
+);
+
 const AppContent = () => {
     const [currentScreen, setCurrentScreen] = useState<AppScreen>('home');
     const [preferences, setPreferences] = useState<UserPreferences | null>(null);
     const [workoutPlan, setWorkoutPlan] = useState<PlanItem[]>([]);
-    const { enterGuestMode } = useAuth();
+    const { enterGuestMode, isVerifying, verificationSuccess, clearVerificationStatus } = useAuth();
+    
+    // Custom dialog hooks
+    const toast = useToast();
+    const { dialogState, confirm, handleConfirm, handleCancel } = useConfirmDialog();
+
+    // 監聽驗證成功狀態，顯示成功提示
+    useEffect(() => {
+        if (verificationSuccess) {
+            toast.success('Email 驗證成功！歡迎加入 Virtual Coach 🎉');
+            clearVerificationStatus();
+        }
+    }, [verificationSuccess, clearVerificationStatus, toast]);
+
+    // 如果正在驗證中，顯示載入畫面
+    if (isVerifying) {
+        return <VerifyingScreen />;
+    }
 
     const handleSetupComplete = async (prefs: UserPreferences) => {
         setPreferences(prefs);
@@ -143,7 +179,18 @@ const AppContent = () => {
             setCurrentScreen('overview');
         } catch (error) {
             console.error("生成失敗", error);
-            alert("抱歉,生成課表時發生錯誤,請稍後再試。");
+            toast.error("抱歉，生成課表時發生錯誤，請稍後再試。");
+            setCurrentScreen('home');
+        }
+    };
+
+    const handleExitWorkout = async () => {
+        const confirmed = await confirm(
+            '結束訓練',
+            '確定要結束目前的訓練嗎？您的進度將不會被保存。',
+            { confirmVariant: 'danger', confirmText: '結束訓練', cancelText: '繼續訓練' }
+        );
+        if (confirmed) {
             setCurrentScreen('home');
         }
     };
@@ -211,9 +258,7 @@ const AppContent = () => {
                     <PlayerScreen
                         plan={workoutPlan}
                         onComplete={() => setCurrentScreen('completed')}
-                        onExit={() => {
-                            if (confirm('確定要結束訓練嗎?')) setCurrentScreen('home');
-                        }}
+                        onExit={handleExitWorkout}
                     />
                 )}
 
@@ -230,6 +275,23 @@ const AppContent = () => {
                     &copy; {new Date().getFullYear()} Virtual Fitness Coach. Built for Trainees.
                 </footer>
             )}
+
+            {/* Toast Notifications */}
+            <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
+
+            {/* Confirm Dialog */}
+            <ConfirmDialog
+                isOpen={dialogState.isOpen}
+                type={dialogState.type}
+                title={dialogState.title}
+                message={dialogState.message}
+                confirmText={dialogState.confirmText}
+                cancelText={dialogState.cancelText}
+                confirmVariant={dialogState.confirmVariant}
+                showCancel={dialogState.showCancel}
+                onConfirm={handleConfirm}
+                onCancel={handleCancel}
+            />
         </div>
     );
 };
