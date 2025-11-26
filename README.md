@@ -220,4 +220,4 @@ npm run preview
 
 ## 📝 授權
 
-此專案採用 MIT 授權 - 詳見 [LICENSE](LICENSE) 檔案
+此專案採用 MIT 授權 - 詳見 [LICENSE](LICENSE) 檔案 
