@@ -6,7 +6,7 @@
  * 使用 Supabase Auth 作為身份驗證後端
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabase, startSessionRefresh, stopSessionRefresh } from '@/lib/supabase';
 import type {
     UserProfile,
     LoginCredentials,
@@ -259,23 +259,6 @@ export const signIn = async (credentials: LoginCredentials): Promise<SignInResul
 };
 
 /**
- * 登出使用者 (Sign Out)
- * 
- * @returns Promise<void>
- * @throws Error - 登出失敗時拋出錯誤
- */
-export const signOut = async (): Promise<void> => {
-    try {
-        const { error } = await supabase.auth.signOut();
-        if (error) throw error;
-    } catch (error: any) {
-        console.error('登出錯誤:', error);
-        const userMessage = sanitizeAuthError(error);
-        throw new Error(userMessage);
-    }
-};
-
-/**
  * 取得當前使用者 (Get Current User)
  * 
  * @returns Promise<UserProfile | null> - 回傳當前使用者資料或 null
@@ -371,22 +354,132 @@ export const updateProfile = async (data: ProfileUpdateData): Promise<UserProfil
 /**
  * 監聽身份驗證狀態變化 (On Auth State Change)
  * 
+ * 處理的事件類型：
+ * - SIGNED_IN: 用戶登入
+ * - SIGNED_OUT: 用戶登出
+ * - TOKEN_REFRESHED: Token 自動刷新（防止自動登出）
+ * - USER_UPDATED: 用戶資料更新
+ * 
+ * 重要：區分「用戶主動登出」和「Token 刷新失敗」
+ * 
  * @param callback - 狀態變化時的回調函數
  * @returns 取消訂閱函數 (Unsubscribe function)
  */
+
+// 標記是否為用戶主動登出
+let isManualSignOut = false;
+
+/**
+ * 登出使用者 (Sign Out)
+ * 
+ * @returns Promise<void>
+ * @throws Error - 登出失敗時拋出錯誤
+ */
+export const signOut = async (): Promise<void> => {
+    try {
+        isManualSignOut = true; // 標記為主動登出
+        stopSessionRefresh(); // 停止 Session 刷新
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+    } catch (error: any) {
+        isManualSignOut = false;
+        console.error('登出錯誤:', error);
+        const userMessage = sanitizeAuthError(error);
+        throw new Error(userMessage);
+    }
+};
+
 export const onAuthStateChange = (
     callback: (user: UserProfile | null) => void
 ) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (session?.user) {
-            const user = await getCurrentUser();
-            callback(user);
-        } else {
-            callback(null);
+        console.log('Auth 狀態變化:', event, session?.user?.email);
+        
+        // 處理 Token 刷新事件
+        if (event === 'TOKEN_REFRESHED') {
+            console.log('✅ Token 已自動刷新');
+            if (session?.user) {
+                const user = await getCurrentUser();
+                if (user) {
+                    callback(user);
+                }
+            }
+            return;
+        }
+        
+        // 處理登入事件
+        if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+            if (session?.user) {
+                startSessionRefresh(); // 開始 Session 刷新
+                const user = await getCurrentUser();
+                callback(user);
+            }
+            return;
+        }
+        
+        // 處理初始 Session 事件（頁面載入時）
+        if (event === 'INITIAL_SESSION') {
+            if (session?.user) {
+                startSessionRefresh(); // 開始 Session 刷新
+                const user = await getCurrentUser();
+                callback(user);
+            } else {
+                callback(null);
+            }
+            return;
+        }
+        
+        // 處理登出事件 - 區分主動登出和 Token 失效
+        if (event === 'SIGNED_OUT') {
+            stopSessionRefresh(); // 停止 Session 刷新
+            
+            if (isManualSignOut) {
+                // 用戶主動登出
+                console.log('用戶主動登出');
+                isManualSignOut = false;
+                callback(null);
+            } else {
+                // 可能是 Token 失效，嘗試重新取得 Session
+                console.log('偵測到 SIGNED_OUT，嘗試恢復 Session...');
+                try {
+                    const { data: { session: currentSession } } = await supabase.auth.getSession();
+                    if (currentSession?.user) {
+                        // Session 仍然有效，不要登出
+                        console.log('✅ Session 仍然有效，保持登入狀態');
+                        startSessionRefresh(); // 重新開始 Session 刷新
+                        const user = await getCurrentUser();
+                        if (user) {
+                            callback(user);
+                        }
+                    } else {
+                        // 嘗試從 localStorage 恢復
+                        const { error } = await supabase.auth.refreshSession();
+                        if (!error) {
+                            const { data: { session: refreshedSession } } = await supabase.auth.getSession();
+                            if (refreshedSession?.user) {
+                                console.log('✅ Session 恢復成功');
+                                startSessionRefresh();
+                                const user = await getCurrentUser();
+                                if (user) {
+                                    callback(user);
+                                    return;
+                                }
+                            }
+                        }
+                        // Session 確實已失效
+                        console.log('Session 已失效，登出');
+                        callback(null);
+                    }
+                } catch (e) {
+                    console.error('恢復 Session 失敗:', e);
+                    callback(null);
+                }
+            }
         }
     });
 
     return () => {
+        stopSessionRefresh();
         subscription.unsubscribe();
     };
 };

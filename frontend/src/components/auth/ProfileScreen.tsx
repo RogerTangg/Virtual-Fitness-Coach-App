@@ -326,7 +326,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onHistoryC
 
                     {/* 版本資訊 */}
                     <div className="text-center text-xs text-gray-400">
-                        Virtual Coach App v2.0 • Phase 2
+                        Virtual Fitness Coach v2.0
                     </div>
                 </div>
             </div>

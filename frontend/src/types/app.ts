@@ -24,9 +24,11 @@ export interface UserPreferences {
  * 
  * Phase 2 新增: login, register, profile (身份驗證相關畫面)
  * Phase 2 Module 3 新增: history (訓練歷史紀錄)
+ * Phase 2 Module 4 新增: dashboard (儀表板)
  */
 export type AppScreen =
   | 'home'
+  | 'dashboard'
   | 'login'
   | 'register'
   | 'profile'

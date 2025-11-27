@@ -6,8 +6,8 @@ import { playShortBeep, playLongBeep } from '../../utils/audio';
 
 interface PlayerScreenProps {
   plan: PlanItem[];
-  onComplete: () => void;
-  onExit: () => void;
+  onComplete: (completedIndex: number, elapsedSeconds: number) => void;
+  onExit: (completedIndex: number, elapsedSeconds: number) => void;
 }
 
 /**
@@ -19,6 +19,12 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({ plan, onComplete, on
   const [timeLeft, setTimeLeft] = useState(plan[0].duration);
   const [isPaused, setIsPaused] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0); // 追蹤實際訓練秒數
+  const [completedExercises, setCompletedExercises] = useState(0); // 追蹤完成的運動數量（不含跳過）
+  const [skippedExercises, setSkippedExercises] = useState<Set<number>>(new Set()); // 追蹤被跳過的動作索引
+
+  // 計算 plan 中的運動總數（不含休息）
+  const totalExercises = plan.filter(item => item.type === 'exercise').length;
 
   // 啟用螢幕喚醒鎖定 (Keep screen awake)
   useWakeLock();
@@ -44,15 +50,22 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({ plan, onComplete, on
     setIsPaused(prev => !prev);
   }, []);
 
-  // 跳過當前項目
+  // 跳過當前項目（跳過的動作不算完成）
   const skipItem = useCallback((e?: React.MouseEvent) => {
     e?.stopPropagation();
+    
+    // 如果當前是運動項目，標記為已跳過
+    if (currentItem.type === 'exercise') {
+      setSkippedExercises(prev => new Set(prev).add(currentIndex));
+    }
+    
     if (currentIndex < plan.length - 1) {
       setCurrentIndex(prev => prev + 1);
     } else {
-      onComplete();
+      // 訓練結束，傳遞完成的運動數量
+      onComplete(completedExercises, elapsedSeconds);
     }
-  }, [currentIndex, plan.length, onComplete]);
+  }, [currentIndex, plan.length, onComplete, elapsedSeconds, completedExercises, currentItem.type]);
 
   // 初始化目前動作
   useEffect(() => {
@@ -71,24 +84,36 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({ plan, onComplete, on
     if (timeLeft > 0) {
       timerRef.current = window.setTimeout(() => {
         setTimeLeft(prev => prev - 1);
+        setElapsedSeconds(prev => prev + 1); // 追蹤實際訓練秒數
       }, 1000);
 
       if (soundEnabled && timeLeft <= 3) {
         playShortBeep();
       }
     } else {
+      // 時間到，動作完成
       if (soundEnabled) playLongBeep();
+      
+      // 如果當前是運動項目且未被跳過，增加完成計數
+      if (currentItem.type === 'exercise' && !skippedExercises.has(currentIndex)) {
+        setCompletedExercises(prev => prev + 1);
+      }
+      
       if (currentIndex < plan.length - 1) {
         setCurrentIndex(prev => prev + 1);
       } else {
-        onComplete();
+        // 訓練結束，傳遞完成的運動數量（+1 因為當前這個也完成了）
+        const finalCompleted = currentItem.type === 'exercise' && !skippedExercises.has(currentIndex)
+          ? completedExercises + 1
+          : completedExercises;
+        onComplete(finalCompleted, elapsedSeconds);
       }
     }
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [timeLeft, isPaused, currentIndex, plan.length, onComplete, soundEnabled]);
+  }, [timeLeft, isPaused, currentIndex, plan.length, onComplete, soundEnabled, currentItem.type, skippedExercises, completedExercises, elapsedSeconds]);
 
   // 鍵盤快捷鍵支援
   useEffect(() => {
@@ -99,13 +124,14 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({ plan, onComplete, on
       } else if (e.code === 'ArrowRight') {
         skipItem();
       } else if (e.code === 'Escape') {
-        onExit();
+        // 中途離開時傳遞已完成的運動數量
+        onExit(completedExercises, elapsedSeconds);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePause, skipItem, onExit]);
+  }, [togglePause, skipItem, onExit, completedExercises, elapsedSeconds]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -143,7 +169,7 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({ plan, onComplete, on
             {soundEnabled ? <Volume2 size={16} className="text-brand-light" /> : <VolumeX size={16} className="text-gray-400" />}
           </button>
           <button 
-            onClick={(e) => { e.stopPropagation(); onExit(); }} 
+            onClick={(e) => { e.stopPropagation(); onExit(completedExercises, elapsedSeconds); }} 
             className="w-9 h-9 rounded-full bg-black/20 hover:bg-red-500/20 flex items-center justify-center transition-colors border border-white/10 backdrop-blur-md group"
             aria-label="退出訓練"
           >

@@ -157,7 +157,7 @@ export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = (
                     </h3>
                     <ol className="text-sm text-brand-gray space-y-2 ml-7 list-decimal">
                         <li>前往您的 Email 信箱</li>
-                        <li>找到來自 Virtual Coach 的驗證信</li>
+                        <li>找到來自 Virtual Fitness Coach 的驗證信</li>
                         <li>點擊「確認 Email」按鈕</li>
                         <li>驗證成功後自動跳轉至首頁</li>
                     </ol>

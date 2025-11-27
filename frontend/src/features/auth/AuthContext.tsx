@@ -170,6 +170,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (hasVerificationParams) {
                 await handleEmailVerificationCallback();
             } else {
+                // 嘗試從 localStorage 恢復 Session
+                try {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (session?.user) {
+                        console.log('從 localStorage 恢復 Session:', session.user.email);
+                    }
+                } catch (e) {
+                    console.warn('恢復 Session 失敗:', e);
+                }
                 await reloadUser();
             }
             
@@ -182,7 +191,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setIsLoading(false);
         });
 
-        // 監聯身份驗證狀態變化（包括從其他 tab 登入）
+        // 監聽身份驗證狀態變化（包括從其他 tab 登入、Token 刷新）
         const unsubscribe = onAuthStateChange((newUser) => {
             // 只在非驗證狀態時更新
             if (!isVerifying) {

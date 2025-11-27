@@ -78,12 +78,74 @@ const supabaseAnonKey = getRequiredEnv('VITE_SUPABASE_ANON_KEY');
 
 /**
  * 全域 Supabase Client 實例 (Global Supabase Client Instance)
+ * 
+ * 重要設定 (Important Settings):
+ * - persistSession: 啟用 Session 持久化到 localStorage
+ * - autoRefreshToken: 自動刷新過期的 Token
+ * - detectSessionInUrl: 從 URL 偵測 Session（用於 Email 驗證回調）
+ * 
  * 如果配置無效，使用 placeholder 值以避免 createClient 拋出錯誤
  */
 export const supabase = createClient(
   supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-key'
+  supabaseAnonKey || 'placeholder-key',
+  {
+    auth: {
+      // 啟用 Session 持久化到 localStorage（防止重新整理後登出）
+      persistSession: true,
+      // 自動刷新過期的 Access Token（防止一段時間後自動登出）
+      autoRefreshToken: true,
+      // 從 URL 偵測 Session（用於 Email 驗證回調）
+      detectSessionInUrl: true,
+      // 使用 localStorage 作為儲存
+      storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+      // Session 持久化的 key
+      storageKey: 'virtual-coach-auth',
+      // 使用 PKCE 流程以提高安全性
+      flowType: 'pkce',
+    },
+    // 全域設定：較長的請求超時
+    global: {
+      fetch: (url, options) => {
+        return fetch(url, { ...options, signal: AbortSignal.timeout(30000) });
+      },
+    },
+  }
 );
+
+/**
+ * 初始化 Session 監控與自動刷新
+ * 每 4 分鐘主動檢查並刷新 Session，避免 Token 過期導致自動登出
+ */
+let sessionRefreshInterval: ReturnType<typeof setInterval> | null = null;
+
+export const startSessionRefresh = () => {
+  if (sessionRefreshInterval) return;
+  
+  sessionRefreshInterval = setInterval(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // 主動刷新 Session
+        const { error } = await supabase.auth.refreshSession();
+        if (error) {
+          console.warn('Session 刷新失敗:', error.message);
+        } else {
+          console.log('✅ Session 已主動刷新');
+        }
+      }
+    } catch (e) {
+      console.warn('Session 檢查失敗:', e);
+    }
+  }, 4 * 60 * 1000); // 每 4 分鐘
+};
+
+export const stopSessionRefresh = () => {
+  if (sessionRefreshInterval) {
+    clearInterval(sessionRefreshInterval);
+    sessionRefreshInterval = null;
+  }
+};
 
 /**
  * 檢查 Supabase 是否已正確配置
