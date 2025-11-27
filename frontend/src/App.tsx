@@ -8,38 +8,61 @@ import { LoginScreen } from './components/auth/LoginScreen';
 import { RegisterScreen } from './components/auth/RegisterScreen';
 import { ProfileScreen } from './components/auth/ProfileScreen';
 import { HistoryScreen } from './components/history/HistoryScreen';
+import { DashboardScreen } from './components/dashboard/DashboardScreen';
 import { Button } from './components/ui/Button';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
 import { ToastContainer } from './components/ui/Toast';
-import { Dumbbell, User, LogIn, Loader2, History } from 'lucide-react';
-import { generateWorkoutPlan } from './features/generator/engine';
+import { Dumbbell, User, LogIn, Loader2, LayoutDashboard } from 'lucide-react';
+import { generateAIWorkoutPlan } from './services/aiGeneratorService';
 import { AuthProvider, useAuth } from './features/auth/AuthContext';
 import { useToast, useConfirmDialog } from './hooks/useDialog';
 
-const Header = ({ onProfileClick, onLoginClick }: { onProfileClick: () => void; onLoginClick: () => void }) => {
+const Header = ({ 
+    onProfileClick, 
+    onLoginClick,
+    onDashboardClick,
+    onHomeClick 
+}: { 
+    onProfileClick: () => void; 
+    onLoginClick: () => void;
+    onDashboardClick: () => void;
+    onHomeClick: () => void;
+}) => {
     const { user, isLoading } = useAuth();
 
     return (
         <header className="bg-brand-dark text-white py-4 px-6 flex justify-between items-center sticky top-0 z-50 shadow-md">
-            <div className="flex items-center gap-2">
+            <button 
+                onClick={user ? onDashboardClick : onHomeClick}
+                className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            >
                 <div className="w-8 h-8 bg-brand-light rounded-lg flex items-center justify-center text-brand-dark font-bold shadow-inner">
                     <Dumbbell size={18} strokeWidth={3} />
                 </div>
                 <h1 className="text-xl font-bold tracking-tight text-white">
                     Virtual <span className="text-white">Coach</span>
                 </h1>
-            </div>
+            </button>
             <div className="flex items-center gap-3">
-                <span className="hidden sm:inline text-sm">MVP v2.0</span>
                 {!isLoading && (
                     user ? (
-                        <button
-                            onClick={onProfileClick}
-                            className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-                        >
-                            <User size={16} />
-                            <span className="text-sm hidden sm:inline">{user.display_name}</span>
-                        </button>
+                        <>
+                            <button
+                                onClick={onDashboardClick}
+                                className="flex items-center gap-2 px-3 py-1 rounded-full hover:bg-white/10 transition-colors"
+                                title="儀表板"
+                            >
+                                <LayoutDashboard size={16} />
+                                <span className="text-sm hidden md:inline">儀表板</span>
+                            </button>
+                            <button
+                                onClick={onProfileClick}
+                                className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                            >
+                                <User size={16} />
+                                <span className="text-sm hidden sm:inline">{user.display_name}</span>
+                            </button>
+                        </>
                     ) : (
                         <button
                             onClick={onLoginClick}
@@ -151,19 +174,29 @@ const AppContent = () => {
     const [preferences, setPreferences] = useState<UserPreferences | null>(null);
     const [workoutPlan, setWorkoutPlan] = useState<PlanItem[]>([]);
     const [workoutStartedAt, setWorkoutStartedAt] = useState<string>('');
-    const { enterGuestMode, isVerifying, verificationSuccess, clearVerificationStatus } = useAuth();
+    const [completedExerciseCount, setCompletedExerciseCount] = useState<number>(0); // 追蹤完成的動作數
+    const [actualDurationSeconds, setActualDurationSeconds] = useState<number>(0); // 追蹤實際訓練秒數
+    const { user, enterGuestMode, isVerifying, verificationSuccess, clearVerificationStatus, isLoading } = useAuth();
     
     // Custom dialog hooks
     const toast = useToast();
     const { dialogState, confirm, handleConfirm, handleCancel } = useConfirmDialog();
 
-    // 監聽驗證成功狀態，顯示成功提示
+    // 監聽驗證成功狀態，顯示成功提示並導向儀表板
     useEffect(() => {
         if (verificationSuccess) {
-            toast.success('Email 驗證成功！歡迎加入 Virtual Coach 🎉');
+            toast.success('Email 驗證成功！歡迎加入 Virtual Fitness Coach 🎉');
             clearVerificationStatus();
+            setCurrentScreen('dashboard');
         }
     }, [verificationSuccess, clearVerificationStatus, toast]);
+
+    // 根據 PRD: 會員登入後自動導向儀表板（只在首次載入時）
+    useEffect(() => {
+        if (!isLoading && user && currentScreen === 'home') {
+            setCurrentScreen('dashboard');
+        }
+    }, [isLoading, user]);
 
     // 如果正在驗證中，顯示載入畫面
     if (isVerifying) {
@@ -176,25 +209,48 @@ const AppContent = () => {
 
         try {
             await new Promise(resolve => setTimeout(resolve, 1500));
-            const plan = await generateWorkoutPlan(prefs);
+            const plan = await generateAIWorkoutPlan(prefs);
             setWorkoutPlan(plan);
             setCurrentScreen('overview');
         } catch (error) {
             console.error("生成失敗", error);
             toast.error("抱歉，生成課表時發生錯誤，請稍後再試。");
-            setCurrentScreen('home');
+            setCurrentScreen(user ? 'dashboard' : 'home');
         }
     };
 
-    const handleExitWorkout = async () => {
+    // 處理中途離開訓練
+    const handleExitWorkout = async (completedIndex: number, elapsedSeconds: number) => {
         const confirmed = await confirm(
             '結束訓練',
-            '確定要結束目前的訓練嗎？您的進度將不會被保存。',
+            '確定要結束目前的訓練嗎？系統會儲存您已完成的進度。',
             { confirmVariant: 'danger', confirmText: '結束訓練', cancelText: '繼續訓練' }
         );
         if (confirmed) {
-            setCurrentScreen('home');
+            // 儲存實際進度
+            setCompletedExerciseCount(completedIndex);
+            setActualDurationSeconds(elapsedSeconds);
+            // 導向完成頁面，讓用戶看到已完成的訓練數據
+            setCurrentScreen('completed');
         }
+    };
+
+    // 處理訓練完成
+    const handleWorkoutFinish = (completedIndex: number, elapsedSeconds: number) => {
+        setCompletedExerciseCount(completedIndex);
+        setActualDurationSeconds(elapsedSeconds);
+        setCurrentScreen('completed');
+    };
+
+    // 登入成功後導向儀表板
+    const handleLoginSuccess = () => {
+        setCurrentScreen('dashboard');
+    };
+
+    // 處理完成訓練後的導向
+    const handleWorkoutComplete = () => {
+        // 根據 PRD: 若為會員，導向儀表板
+        setCurrentScreen(user ? 'dashboard' : 'history');
     };
 
     return (
@@ -203,10 +259,12 @@ const AppContent = () => {
                 <Header
                     onProfileClick={() => setCurrentScreen('profile')}
                     onLoginClick={() => setCurrentScreen('login')}
+                    onDashboardClick={() => setCurrentScreen('dashboard')}
+                    onHomeClick={() => setCurrentScreen('home')}
                 />
             )}
 
-            <main className={`flex-1 w-full ${currentScreen !== 'workout' ? 'container mx-auto max-w-4xl p-4' : ''}`}>
+            <main className={`flex-1 w-full ${currentScreen !== 'workout' ? 'container mx-auto max-w-5xl p-4' : ''}`}>
                 {currentScreen === 'home' && (
                     <HomeScreen
                         onStart={() => setCurrentScreen('setup')}
@@ -214,9 +272,17 @@ const AppContent = () => {
                     />
                 )}
 
+                {currentScreen === 'dashboard' && (
+                    <DashboardScreen
+                        onStartWorkout={() => setCurrentScreen('setup')}
+                        onViewHistory={() => setCurrentScreen('history')}
+                        onViewProfile={() => setCurrentScreen('profile')}
+                    />
+                )}
+
                 {currentScreen === 'login' && (
                     <LoginScreen
-                        onSuccess={() => setCurrentScreen('home')}
+                        onSuccess={handleLoginSuccess}
                         onSwitchToRegister={() => setCurrentScreen('register')}
                         onContinueAsGuest={() => {
                             enterGuestMode();
@@ -227,21 +293,21 @@ const AppContent = () => {
 
                 {currentScreen === 'register' && (
                     <RegisterScreen
-                        onSuccess={() => setCurrentScreen('home')}
+                        onSuccess={handleLoginSuccess}
                         onSwitchToLogin={() => setCurrentScreen('login')}
                     />
                 )}
 
                 {currentScreen === 'profile' && (
                     <ProfileScreen 
-                        onBack={() => setCurrentScreen('home')}
+                        onBack={() => setCurrentScreen(user ? 'dashboard' : 'home')}
                         onHistoryClick={() => setCurrentScreen('history')}
                     />
                 )}
 
                 {currentScreen === 'history' && (
                     <HistoryScreen
-                        onBack={() => setCurrentScreen('profile')}
+                        onBack={() => setCurrentScreen(user ? 'dashboard' : 'profile')}
                         onStartWorkout={() => setCurrentScreen('setup')}
                     />
                 )}
@@ -249,7 +315,7 @@ const AppContent = () => {
                 {currentScreen === 'setup' && (
                     <SetupScreen
                         onComplete={handleSetupComplete}
-                        onBack={() => setCurrentScreen('home')}
+                        onBack={() => setCurrentScreen(user ? 'dashboard' : 'home')}
                     />
                 )}
 
@@ -272,7 +338,7 @@ const AppContent = () => {
                 {currentScreen === 'workout' && workoutPlan.length > 0 && (
                     <PlayerScreen
                         plan={workoutPlan}
-                        onComplete={() => setCurrentScreen('completed')}
+                        onComplete={handleWorkoutFinish}
                         onExit={handleExitWorkout}
                     />
                 )}
@@ -283,8 +349,10 @@ const AppContent = () => {
                         plan={workoutPlan}
                         preferences={preferences}
                         startedAt={workoutStartedAt || new Date().toISOString()}
-                        onHome={() => setCurrentScreen('home')}
+                        onHome={handleWorkoutComplete}
                         onHistory={() => setCurrentScreen('history')}
+                        completedExerciseCount={completedExerciseCount}
+                        actualDurationSeconds={actualDurationSeconds}
                     />
                 )}
             </main>

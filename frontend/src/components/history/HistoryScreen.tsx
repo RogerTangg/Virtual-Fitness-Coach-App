@@ -156,7 +156,9 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack, onStartWor
   const goalDisplayMap: Record<string, { label: string; color: string }> = {
     'muscle': { label: '增肌', color: 'bg-blue-100 text-blue-700' },
     'muscle_gain': { label: '增肌', color: 'bg-blue-100 text-blue-700' },
+    'fat-loss': { label: '減脂', color: 'bg-orange-100 text-orange-700' },
     'fat_loss': { label: '減脂', color: 'bg-orange-100 text-orange-700' },
+    'tone': { label: '塑形', color: 'bg-green-100 text-green-700' },
     'cardio': { label: '有氧', color: 'bg-pink-100 text-pink-700' },
     'strength': { label: '力量', color: 'bg-purple-100 text-purple-700' },
     'flexibility': { label: '柔軟度', color: 'bg-teal-100 text-teal-700' },
