@@ -114,37 +114,163 @@ export const supabase = createClient(
 );
 
 /**
- * 初始化 Session 監控與自動刷新
- * 每 4 分鐘主動檢查並刷新 Session，避免 Token 過期導致自動登出
+ * Session 管理模組
+ * 
+ * 解決的問題：
+ * 1. Token 過期導致自動登出
+ * 2. 瀏覽器休眠/閒置後 Session 失效
+ * 3. setInterval 在背景 tab 不可靠的問題
  */
-let sessionRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
-export const startSessionRefresh = () => {
-  if (sessionRefreshInterval) return;
+let sessionRefreshInterval: ReturnType<typeof setInterval> | null = null;
+let visibilityChangeHandler: (() => void) | null = null;
+let lastRefreshTime: number = 0;
+
+// Token 刷新間隔：3 分鐘（Supabase 預設 Token 有效期約 1 小時）
+const REFRESH_INTERVAL_MS = 3 * 60 * 1000;
+// 最小刷新間隔：防止過於頻繁刷新
+const MIN_REFRESH_INTERVAL_MS = 30 * 1000;
+
+/**
+ * 執行 Session 刷新
+ * 帶有防抖動機制，避免短時間內重複刷新
+ */
+const performSessionRefresh = async (force: boolean = false): Promise<boolean> => {
+  const now = Date.now();
   
-  sessionRefreshInterval = setInterval(async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        // 主動刷新 Session
-        const { error } = await supabase.auth.refreshSession();
-        if (error) {
-          console.warn('Session 刷新失敗:', error.message);
-        } else {
-          console.log('✅ Session 已主動刷新');
+  // 防抖動：如果距離上次刷新時間太短，跳過（除非強制刷新）
+  if (!force && (now - lastRefreshTime) < MIN_REFRESH_INTERVAL_MS) {
+    return true;
+  }
+  
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      console.log('⚠️ 無有效 Session，跳過刷新');
+      return false;
+    }
+    
+    // 檢查 Token 是否即將過期（提前 5 分鐘刷新）
+    const expiresAt = session.expires_at;
+    if (expiresAt) {
+      const expiresInMs = expiresAt * 1000 - now;
+      const fiveMinutesMs = 5 * 60 * 1000;
+      
+      // 如果 Token 還有超過 5 分鐘才過期，且不是強制刷新，可以跳過
+      if (!force && expiresInMs > fiveMinutesMs) {
+        console.log(`✓ Token 仍有效（剩餘 ${Math.round(expiresInMs / 60000)} 分鐘）`);
+        lastRefreshTime = now;
+        return true;
+      }
+    }
+    
+    // 使用當前的 refresh_token 來刷新 Session
+    const { data, error } = await supabase.auth.refreshSession({
+      refresh_token: session.refresh_token,
+    });
+    
+    if (error) {
+      console.warn('❌ Session 刷新失敗:', error.message);
+      
+      // 如果是 refresh_token 無效，嘗試重新取得 Session
+      if (error.message.includes('refresh_token') || error.message.includes('invalid')) {
+        console.log('嘗試從 storage 恢復 Session...');
+        const { data: recoveredSession } = await supabase.auth.getSession();
+        if (recoveredSession.session) {
+          console.log('✅ 從 storage 恢復 Session 成功');
+          lastRefreshTime = now;
+          return true;
         }
       }
-    } catch (e) {
-      console.warn('Session 檢查失敗:', e);
+      return false;
     }
-  }, 4 * 60 * 1000); // 每 4 分鐘
+    
+    if (data.session) {
+      console.log('✅ Session 已成功刷新');
+      lastRefreshTime = now;
+      return true;
+    }
+    
+    return false;
+  } catch (e) {
+    console.warn('Session 刷新發生錯誤:', e);
+    return false;
+  }
 };
 
+/**
+ * 處理頁面可見性變化
+ * 當使用者從其他 tab 切換回來，或從休眠中恢復時觸發
+ */
+const handleVisibilityChange = async () => {
+  if (document.visibilityState === 'visible') {
+    console.log('📱 頁面重新可見，檢查 Session 狀態...');
+    
+    // 強制刷新 Session（因為可能已經休眠很久）
+    const success = await performSessionRefresh(true);
+    
+    if (!success) {
+      console.warn('⚠️ 頁面恢復後 Session 刷新失敗');
+    }
+  }
+};
+
+/**
+ * 開始 Session 自動刷新
+ * 使用多重機制確保 Session 不會意外過期
+ */
+export const startSessionRefresh = () => {
+  // 避免重複註冊
+  if (sessionRefreshInterval) return;
+  
+  console.log('🔄 啟動 Session 自動刷新機制');
+  
+  // 立即執行一次刷新檢查
+  performSessionRefresh(false);
+  
+  // 機制 1：定時刷新（每 3 分鐘）
+  sessionRefreshInterval = setInterval(() => {
+    performSessionRefresh(false);
+  }, REFRESH_INTERVAL_MS);
+  
+  // 機制 2：監聽頁面可見性變化（處理休眠/切換 tab）
+  if (typeof document !== 'undefined' && !visibilityChangeHandler) {
+    visibilityChangeHandler = handleVisibilityChange;
+    document.addEventListener('visibilitychange', visibilityChangeHandler);
+  }
+  
+  // 機制 3：監聯網路恢復事件
+  if (typeof window !== 'undefined') {
+    window.addEventListener('online', () => {
+      console.log('🌐 網路已恢復，刷新 Session...');
+      performSessionRefresh(true);
+    });
+  }
+};
+
+/**
+ * 停止 Session 自動刷新
+ */
 export const stopSessionRefresh = () => {
   if (sessionRefreshInterval) {
     clearInterval(sessionRefreshInterval);
     sessionRefreshInterval = null;
   }
+  
+  if (visibilityChangeHandler && typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', visibilityChangeHandler);
+    visibilityChangeHandler = null;
+  }
+  
+  console.log('⏹️ Session 自動刷新已停止');
+};
+
+/**
+ * 手動觸發 Session 刷新（供外部呼叫）
+ */
+export const forceRefreshSession = async (): Promise<boolean> => {
+  return performSessionRefresh(true);
 };
 
 /**

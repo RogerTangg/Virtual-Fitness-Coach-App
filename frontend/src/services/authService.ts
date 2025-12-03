@@ -6,7 +6,7 @@
  * 使用 Supabase Auth 作為身份驗證後端
  */
 
-import { supabase, startSessionRefresh, stopSessionRefresh } from '@/lib/supabase';
+import { supabase, startSessionRefresh, stopSessionRefresh, forceRefreshSession } from '@/lib/supabase';
 import type {
     UserProfile,
     LoginCredentials,
@@ -440,49 +440,56 @@ export const onAuthStateChange = (
         
         // 處理登出事件 - 區分主動登出和 Token 失效
         if (event === 'SIGNED_OUT') {
-            stopSessionRefresh(); // 停止 Session 刷新
-            
             if (isManualSignOut) {
                 // 用戶主動登出
-                console.log('用戶主動登出');
+                console.log('👋 用戶主動登出');
+                stopSessionRefresh();
                 isManualSignOut = false;
                 callback(null);
-            } else {
-                // 可能是 Token 失效，嘗試重新取得 Session
-                console.log('偵測到 SIGNED_OUT，嘗試恢復 Session...');
-                try {
-                    const { data: { session: currentSession } } = await supabase.auth.getSession();
-                    if (currentSession?.user) {
-                        // Session 仍然有效，不要登出
-                        console.log('✅ Session 仍然有效，保持登入狀態');
-                        startSessionRefresh(); // 重新開始 Session 刷新
-                        const user = await getCurrentUser();
-                        if (user) {
-                            callback(user);
-                        }
-                    } else {
-                        // 嘗試從 localStorage 恢復
-                        const { error } = await supabase.auth.refreshSession();
-                        if (!error) {
-                            const { data: { session: refreshedSession } } = await supabase.auth.getSession();
-                            if (refreshedSession?.user) {
-                                console.log('✅ Session 恢復成功');
-                                startSessionRefresh();
-                                const user = await getCurrentUser();
-                                if (user) {
-                                    callback(user);
-                                    return;
-                                }
-                            }
-                        }
-                        // Session 確實已失效
-                        console.log('Session 已失效，登出');
-                        callback(null);
+                return;
+            }
+            
+            // 非主動登出：可能是 Token 失效或網路問題
+            // 延遲處理，給予自動刷新機制時間恢復
+            console.log('⚠️ 偵測到 SIGNED_OUT 事件，延遲 2 秒後檢查...');
+            
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            try {
+                // 先嘗試強制刷新 Session
+                const refreshSuccess = await forceRefreshSession();
+                
+                if (refreshSuccess) {
+                    console.log('✅ Session 恢復成功，保持登入狀態');
+                    const user = await getCurrentUser();
+                    if (user) {
+                        callback(user);
+                        return;
                     }
-                } catch (e) {
-                    console.error('恢復 Session 失敗:', e);
-                    callback(null);
                 }
+                
+                // 刷新失敗，再次檢查 Session 狀態
+                const { data: { session: currentSession } } = await supabase.auth.getSession();
+                
+                if (currentSession?.user) {
+                    console.log('✅ Session 仍然有效，保持登入狀態');
+                    startSessionRefresh();
+                    const user = await getCurrentUser();
+                    if (user) {
+                        callback(user);
+                        return;
+                    }
+                }
+                
+                // Session 確實已失效
+                console.log('❌ Session 已確認失效，登出');
+                stopSessionRefresh();
+                callback(null);
+                
+            } catch (e) {
+                console.error('恢復 Session 過程中發生錯誤:', e);
+                stopSessionRefresh();
+                callback(null);
             }
         }
     });

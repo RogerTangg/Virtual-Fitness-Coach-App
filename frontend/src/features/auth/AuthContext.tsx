@@ -8,7 +8,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import type { AuthState, UserProfile } from '@/types/auth';
 import { getCurrentUser, onAuthStateChange } from '@/services/authService';
-import { supabase, startSessionRefresh } from '@/lib/supabase';
+import { supabase, startSessionRefresh, forceRefreshSession } from '@/lib/supabase';
 
 // 定義 Context 型別
 interface AuthContextType extends AuthState {
@@ -193,9 +193,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 // 嘗試從 localStorage 恢復 Session
                 try {
                     const { data: { session } } = await supabase.auth.getSession();
+                    
                     if (session?.user) {
-                        console.log('從 localStorage 恢復 Session:', session.user.email);
-                        // 🔧 修復：恢復 Session 後立即開始刷新
+                        console.log('📦 從 localStorage 恢復 Session:', session.user.email);
+                        
+                        // 檢查 Token 是否即將過期（5 分鐘內）
+                        const expiresAt = session.expires_at;
+                        const now = Math.floor(Date.now() / 1000);
+                        const fiveMinutes = 5 * 60;
+                        
+                        if (expiresAt && (expiresAt - now) < fiveMinutes) {
+                            console.log('⏰ Token 即將過期，立即刷新...');
+                            await forceRefreshSession();
+                        }
+                        
+                        // 開始 Session 刷新機制
                         startSessionRefresh();
                     }
                 } catch (e) {
