@@ -433,6 +433,23 @@ export const onAuthStateChange = (
                 const user = await getCurrentUser();
                 callback(user);
             } else {
+                // 🔧 修復：INITIAL_SESSION 沒有 session 時，再次嘗試從 storage 恢復
+                // 這處理了 Supabase 可能還沒完全從 localStorage 載入的情況
+                console.log('⏳ INITIAL_SESSION 無 session，嘗試從 storage 恢復...');
+                try {
+                    // 短暫延遲後再次檢查
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    const { data: { session: recoveredSession } } = await supabase.auth.getSession();
+                    if (recoveredSession?.user) {
+                        console.log('✅ 從 storage 恢復 Session 成功');
+                        startSessionRefresh();
+                        const user = await getCurrentUser();
+                        callback(user);
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('恢復 Session 失敗:', e);
+                }
                 callback(null);
             }
             return;

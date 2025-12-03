@@ -179,6 +179,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (isInitializedRef.current) return;
         isInitializedRef.current = true;
         
+        // 🔧 修復：追蹤初始化是否完成，避免 onAuthStateChange 的競爭條件
+        let isInitCompleted = false;
+        
         const init = async () => {
             // 先檢查是否有驗證回調（hash 或 query params）
             const hasVerificationParams = 
@@ -216,12 +219,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 await reloadUser();
             }
             
+            // 標記初始化完成
+            isInitCompleted = true;
+            
             // 確保 isLoading 一定會結束（防止極端情況）
             setIsLoading(false);
         };
 
         init().catch(() => {
             // 初始化失敗也要結束 loading 狀態
+            isInitCompleted = true;
             setIsLoading(false);
         });
 
@@ -229,6 +236,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const unsubscribe = onAuthStateChange((newUser) => {
             // 🔧 修復：使用 ref 而非 state 來檢查驗證狀態，避免閉包問題
             if (!isVerifyingRef.current) {
+                // 🔧 修復：如果初始化尚未完成且 newUser 為 null，忽略此事件
+                // 這避免了 INITIAL_SESSION 事件在 getSession() 完成前將用戶設為 null
+                if (!isInitCompleted && newUser === null) {
+                    console.log('⏳ 初始化未完成，忽略空用戶事件');
+                    return;
+                }
                 setUser(newUser);
                 setIsGuest(newUser === null);
                 setIsLoading(false);
