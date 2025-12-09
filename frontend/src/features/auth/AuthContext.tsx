@@ -56,6 +56,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     /**
      * 重新載入使用者資訊 (Reload user information)
      * 加入 timeout 保護，避免卡住
+     * 
+     * 🔧 修復：timeout 時不自動登出，改為保持當前狀態
      */
     const reloadUser = useCallback(async () => {
         setIsLoading(true);
@@ -63,14 +65,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             // 使用 Promise.race 加入 8 秒 timeout
             const currentUser = await Promise.race([
                 getCurrentUser(),
-                new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000))
+                new Promise<UserProfile | null | 'timeout'>((resolve) => 
+                    setTimeout(() => resolve('timeout'), 8000)
+                )
             ]);
+            
+            // 🔧 修復：如果是 timeout，不改變用戶狀態
+            if (currentUser === 'timeout') {
+                console.warn('⚠️ 載入用戶資訊超時，保持當前狀態');
+                setIsLoading(false);
+                return;
+            }
+            
             setUser(currentUser);
             setIsGuest(currentUser === null);
         } catch (error) {
             console.error('載入使用者資訊失敗:', error);
-            setUser(null);
-            setIsGuest(true);
+            // 🔧 修復：錯誤時不自動登出，保持當前狀態
+            // setUser(null);
+            // setIsGuest(true);
         } finally {
             setIsLoading(false);
         }

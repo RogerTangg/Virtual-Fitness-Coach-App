@@ -126,14 +126,18 @@ let sessionRefreshInterval: ReturnType<typeof setInterval> | null = null;
 let visibilityChangeHandler: (() => void) | null = null;
 let lastRefreshTime: number = 0;
 
-// Token 刷新間隔：3 分鐘（Supabase 預設 Token 有效期約 1 小時）
-const REFRESH_INTERVAL_MS = 3 * 60 * 1000;
+// Token 刷新間隔：2 分鐘（更頻繁檢查，確保不會意外過期）
+// Supabase 預設 Token 有效期約 1 小時
+const REFRESH_INTERVAL_MS = 2 * 60 * 1000;
 // 最小刷新間隔：防止過於頻繁刷新
 const MIN_REFRESH_INTERVAL_MS = 30 * 1000;
 
 /**
  * 執行 Session 刷新
  * 帶有防抖動機制，避免短時間內重複刷新
+ * 
+ * 🔧 修復：Supabase JS v2 的 refreshSession() 不需要傳入參數
+ * 它會自動使用當前 session 中的 refresh_token
  */
 const performSessionRefresh = async (force: boolean = false): Promise<boolean> => {
   const now = Date.now();
@@ -151,30 +155,30 @@ const performSessionRefresh = async (force: boolean = false): Promise<boolean> =
       return false;
     }
     
-    // 檢查 Token 是否即將過期（提前 5 分鐘刷新）
+    // 檢查 Token 是否即將過期（提前 10 分鐘刷新，更保守的策略）
     const expiresAt = session.expires_at;
     if (expiresAt) {
       const expiresInMs = expiresAt * 1000 - now;
-      const fiveMinutesMs = 5 * 60 * 1000;
+      const tenMinutesMs = 10 * 60 * 1000;
       
-      // 如果 Token 還有超過 5 分鐘才過期，且不是強制刷新，可以跳過
-      if (!force && expiresInMs > fiveMinutesMs) {
+      // 如果 Token 還有超過 10 分鐘才過期，且不是強制刷新，可以跳過
+      if (!force && expiresInMs > tenMinutesMs) {
         console.log(`✓ Token 仍有效（剩餘 ${Math.round(expiresInMs / 60000)} 分鐘）`);
         lastRefreshTime = now;
         return true;
       }
+      
+      console.log(`⏰ Token 即將過期（剩餘 ${Math.round(expiresInMs / 60000)} 分鐘），執行刷新...`);
     }
     
-    // 使用當前的 refresh_token 來刷新 Session
-    const { data, error } = await supabase.auth.refreshSession({
-      refresh_token: session.refresh_token,
-    });
+    // 🔧 修復：Supabase JS v2 的 refreshSession() 不需要傳入參數
+    const { data, error } = await supabase.auth.refreshSession();
     
     if (error) {
       console.warn('❌ Session 刷新失敗:', error.message);
       
       // 如果是 refresh_token 無效，嘗試重新取得 Session
-      if (error.message.includes('refresh_token') || error.message.includes('invalid')) {
+      if (error.message.includes('refresh_token') || error.message.includes('invalid') || error.message.includes('expired')) {
         console.log('嘗試從 storage 恢復 Session...');
         const { data: recoveredSession } = await supabase.auth.getSession();
         if (recoveredSession.session) {
@@ -187,7 +191,7 @@ const performSessionRefresh = async (force: boolean = false): Promise<boolean> =
     }
     
     if (data.session) {
-      console.log('✅ Session 已成功刷新');
+      console.log('✅ Session 已成功刷新，新 Token 有效期至:', new Date(data.session.expires_at! * 1000).toLocaleString());
       lastRefreshTime = now;
       return true;
     }

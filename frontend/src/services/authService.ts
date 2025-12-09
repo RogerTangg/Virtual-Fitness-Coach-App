@@ -404,18 +404,16 @@ export const signOut = async (): Promise<void> => {
 export const onAuthStateChange = (
     callback: (user: UserProfile | null) => void
 ) => {
+    // 🔧 修復：追蹤是否正在處理 SIGNED_OUT 事件，避免重複處理
+    let isProcessingSignOut = false;
+    
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         console.log('Auth 狀態變化:', event, session?.user?.email);
         
         // 處理 Token 刷新事件
         if (event === 'TOKEN_REFRESHED') {
             console.log('✅ Token 已自動刷新');
-            if (session?.user) {
-                const user = await getCurrentUser();
-                if (user) {
-                    callback(user);
-                }
-            }
+            // Token 刷新成功，不需要重新取得用戶資料（避免不必要的 API 呼叫）
             return;
         }
         
@@ -460,6 +458,12 @@ export const onAuthStateChange = (
         
         // 處理登出事件 - 區分主動登出和 Token 失效
         if (event === 'SIGNED_OUT') {
+            // 避免重複處理
+            if (isProcessingSignOut) {
+                console.log('⏳ 已經在處理 SIGNED_OUT 事件，跳過');
+                return;
+            }
+            
             if (isManualSignOut) {
                 // 用戶主動登出
                 console.log('👋 用戶主動登出');
@@ -471,12 +475,27 @@ export const onAuthStateChange = (
             
             // 非主動登出：可能是 Token 失效或網路問題
             // 延遲處理，給予自動刷新機制時間恢復
-            console.log('⚠️ 偵測到 SIGNED_OUT 事件，延遲 2 秒後檢查...');
+            console.log('⚠️ 偵測到非預期 SIGNED_OUT 事件，延遲 3 秒後檢查...');
+            isProcessingSignOut = true;
             
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            await new Promise(resolve => setTimeout(resolve, 3000));
             
             try {
-                // 先嘗試強制刷新 Session
+                // 🔧 修復：先檢查是否仍有有效 Session（可能已經被其他邏輯刷新）
+                const { data: { session: existingSession } } = await supabase.auth.getSession();
+                
+                if (existingSession?.user) {
+                    console.log('✅ Session 已經有效，保持登入狀態');
+                    startSessionRefresh();
+                    const user = await getCurrentUser();
+                    if (user) {
+                        callback(user);
+                        isProcessingSignOut = false;
+                        return;
+                    }
+                }
+                
+                // 嘗試強制刷新 Session
                 const refreshSuccess = await forceRefreshSession();
                 
                 if (refreshSuccess) {
@@ -484,19 +503,7 @@ export const onAuthStateChange = (
                     const user = await getCurrentUser();
                     if (user) {
                         callback(user);
-                        return;
-                    }
-                }
-                
-                // 刷新失敗，再次檢查 Session 狀態
-                const { data: { session: currentSession } } = await supabase.auth.getSession();
-                
-                if (currentSession?.user) {
-                    console.log('✅ Session 仍然有效，保持登入狀態');
-                    startSessionRefresh();
-                    const user = await getCurrentUser();
-                    if (user) {
-                        callback(user);
+                        isProcessingSignOut = false;
                         return;
                     }
                 }
@@ -510,12 +517,15 @@ export const onAuthStateChange = (
                 console.error('恢復 Session 過程中發生錯誤:', e);
                 stopSessionRefresh();
                 callback(null);
+            } finally {
+                isProcessingSignOut = false;
             }
         }
     });
 
+    // 🔧 修復：unsubscribe 時不停止 Session 刷新
+    // Session 刷新應該在用戶主動登出或 Session 確認失效時停止
     return () => {
-        stopSessionRefresh();
         subscription.unsubscribe();
     };
 };
