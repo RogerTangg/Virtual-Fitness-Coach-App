@@ -155,19 +155,21 @@ const performSessionRefresh = async (force: boolean = false): Promise<boolean> =
       return false;
     }
     
-    // 檢查 Token 是否即將過期（提前 10 分鐘刷新，更保守的策略）
+    // 檢查 Token 是否即將過期（提前 10 分鐘刷新）
     const expiresAt = session.expires_at;
     if (expiresAt) {
       const expiresInMs = expiresAt * 1000 - now;
       const tenMinutesMs = 10 * 60 * 1000;
       
-      // 如果 Token 還有超過 10 分鐘才過期，且不是強制刷新，可以跳過
-      if (!force && expiresInMs > tenMinutesMs) {
-        console.log(`✓ Token 仍有效（剩餘 ${Math.round(expiresInMs / 60000)} 分鐘）`);
+      // 🔧 修復：即使是強制刷新，如果 Token 還有超過 10 分鐘，也跳過
+      // 這避免了不必要的刷新導致 SIGNED_IN 事件被觸發
+      if (expiresInMs > tenMinutesMs) {
+        console.log(`✓ Token 仍有效（剩餘 ${Math.round(expiresInMs / 60000)} 分鐘），無需刷新`);
         lastRefreshTime = now;
         return true;
       }
       
+      // 只有真的即將過期時才刷新
       console.log(`⏰ Token 即將過期（剩餘 ${Math.round(expiresInMs / 60000)} 分鐘），執行刷新...`);
     }
     
@@ -206,16 +208,27 @@ const performSessionRefresh = async (force: boolean = false): Promise<boolean> =
 /**
  * 處理頁面可見性變化
  * 當使用者從其他 tab 切換回來，或從休眠中恢復時觸發
+ * 
+ * 🔧 修復：不再無條件強制刷新，只在距離上次刷新超過閾值時才刷新
  */
 const handleVisibilityChange = async () => {
   if (document.visibilityState === 'visible') {
+    const now = Date.now();
+    const timeSinceLastRefresh = now - lastRefreshTime;
+    
+    // 如果距離上次刷新不到 1 分鐘，跳過
+    if (timeSinceLastRefresh < 60 * 1000) {
+      console.log('📱 頁面重新可見，上次刷新在 1 分鐘內，跳過檢查');
+      return;
+    }
+    
     console.log('📱 頁面重新可見，檢查 Session 狀態...');
     
-    // 強制刷新 Session（因為可能已經休眠很久）
-    const success = await performSessionRefresh(true);
+    // 🔧 修復：不使用強制刷新，讓 performSessionRefresh 自行判斷是否需要刷新
+    const success = await performSessionRefresh(false);
     
     if (!success) {
-      console.warn('⚠️ 頁面恢復後 Session 刷新失敗');
+      console.warn('⚠️ 頁面恢復後 Session 檢查失敗');
     }
   }
 };

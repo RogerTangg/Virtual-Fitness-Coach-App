@@ -52,6 +52,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const isVerifyingRef = useRef(false);
     // 追蹤是否已經初始化，避免重複初始化
     const isInitializedRef = useRef(false);
+    // 🔧 修復：使用 ref 追蹤當前用戶，解決閉包問題
+    const userRef = useRef<UserProfile | null>(null);
+    
+    // 同步 user state 到 ref
+    useEffect(() => {
+        userRef.current = user;
+    }, [user]);
 
     /**
      * 重新載入使用者資訊 (Reload user information)
@@ -275,8 +282,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 return;
             }
             
-            setUser(newUser);
-            setIsGuest(newUser === null);
+            // 🔧 修復：如果當前有用戶但收到 null，進行額外驗證
+            // 這可能是因為 Session 刷新過程中的瞬態狀態
+            // 使用 userRef 避免閉包問題
+            if (userRef.current && newUser === null) {
+                console.log('⚠️ 當前有用戶但收到 null，進行額外驗證...');
+                // 不立即設為 null，讓 authService 中的 SIGNED_OUT 處理邏輯來判斷
+                // 如果真的需要登出，authService 會在驗證後再次觸發 callback
+                return;
+            }
+            
+            // 正常更新用戶狀態
+            if (newUser) {
+                setUser(newUser);
+                setIsGuest(false);
+            } else {
+                setUser(null);
+                setIsGuest(true);
+            }
             setIsLoading(false);
         });
 

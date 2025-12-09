@@ -406,21 +406,37 @@ export const onAuthStateChange = (
 ) => {
     // 🔧 修復：追蹤是否正在處理 SIGNED_OUT 事件，避免重複處理
     let isProcessingSignOut = false;
+    // 🔧 修復：追蹤上次處理的用戶 ID，避免重複處理同一用戶的事件
+    let lastProcessedUserId: string | null = null;
+    // 🔧 修復：追蹤上次事件時間，避免短時間內重複處理
+    let lastEventTime = 0;
     
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         console.log('Auth 狀態變化:', event, session?.user?.email);
         
+        const now = Date.now();
+        
         // 處理 Token 刷新事件
         if (event === 'TOKEN_REFRESHED') {
             console.log('✅ Token 已自動刷新');
-            // Token 刷新成功，不需要重新取得用戶資料（避免不必要的 API 呼叫）
+            // Token 刷新成功，不需要任何操作
             return;
         }
         
         // 處理登入事件
         if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
             if (session?.user) {
-                startSessionRefresh(); // 開始 Session 刷新
+                // 🔧 修復：如果是同一個用戶且距離上次處理不到 5 秒，跳過
+                // 這避免了 refreshSession() 觸發的 SIGNED_IN 事件導致不必要的處理
+                if (session.user.id === lastProcessedUserId && (now - lastEventTime) < 5000) {
+                    console.log('⏭️ 跳過重複的 SIGNED_IN 事件（同一用戶，5秒內）');
+                    return;
+                }
+                
+                lastProcessedUserId = session.user.id;
+                lastEventTime = now;
+                
+                startSessionRefresh(); // 開始 Session 刷新（內部有防重複機制）
                 const user = await getCurrentUser();
                 callback(user);
             }
@@ -430,6 +446,9 @@ export const onAuthStateChange = (
         // 處理初始 Session 事件（頁面載入時）
         if (event === 'INITIAL_SESSION') {
             if (session?.user) {
+                lastProcessedUserId = session.user.id;
+                lastEventTime = now;
+                
                 startSessionRefresh(); // 開始 Session 刷新
                 const user = await getCurrentUser();
                 callback(user);
@@ -443,6 +462,8 @@ export const onAuthStateChange = (
                     const { data: { session: recoveredSession } } = await supabase.auth.getSession();
                     if (recoveredSession?.user) {
                         console.log('✅ 從 storage 恢復 Session 成功');
+                        lastProcessedUserId = recoveredSession.user.id;
+                        lastEventTime = now;
                         startSessionRefresh();
                         const user = await getCurrentUser();
                         callback(user);
